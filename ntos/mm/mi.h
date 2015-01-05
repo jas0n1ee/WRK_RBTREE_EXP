@@ -5297,7 +5297,7 @@ PMMADDRESS_NODE
 MiGetLastNode (
     IN PMM_AVL_TABLE Root
     );
-
+//I will mainly modify next two function
 VOID
 FASTCALL
 MiInsertNode (

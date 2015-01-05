@@ -43,7 +43,122 @@ extern MM_AVL_TABLE MmSectionBasedRoot;
 #if (_MSC_VER >= 800)
 #pragma warning(disable:4010)        // Allow pretty pictures without the noise
 #endif
+//***************************************
+#define rb_black 0
+#define rb_red 1
 
+PMMADDRESS_NODE rb_parent(PMMADDRESS_NODE node)
+{
+	node=SANITIZE_PARENT_NODE(node->u1.Parent);
+	return node;
+}
+int rb_color(PMMADDRESS_NODE node)
+{
+	return node->u1.Balance;
+}
+int rb_is_red(PMMADDRESS_NODE node)
+{
+	return (node->u1.Balance)&1;
+}
+int rb_is_black(PMMADDRESS_NODE node)
+{
+	return !((node->u1.Balance)&1);
+}
+void rb_set_black(PMMADDRESS_NODE node)
+{
+	node->u1.Balance=rb_black;
+}
+void rb_set_red(PMMADDRESS_NODE node)
+{
+	node->u1.Balance=rb_red;
+}
+void rb_set_parent( PMMADDRESS_NODE rb,PMMADDRESS_NODE p)
+{
+	rb->u1.Parent =(PMMADDRESS_NODE) (rb_color(rb) +(unsigned long) p);
+}
+static void rb_erase_color(PMMADDRESS_NODE node,PMMADDRESS_NODE parent,
+			     PMM_AVL_TABLE root)
+{
+	
+	PMMADDRESS_NODE other;
+	while ((!node || rb_is_black(node)) && node != root->BalancedRoot.RightChild)
+	{
+		if (parent->LeftChild == node)
+		{
+			other = parent->RightChild;
+			if (rb_is_red(other))
+			{
+				rb_set_black(other);
+				rb_set_red(parent);
+				rb_rotate_left(parent, root);
+				other = parent->RightChild;
+			}
+			if ((!other->LeftChild || rb_is_black(other->LeftChild)) &&
+				(!other->RightChild || rb_is_black(other->RightChild)))
+			{
+				rb_set_red(other);
+				node = parent;
+				parent = rb_parent(node);
+			}
+			else
+			{
+				if (!other->RightChild || rb_is_black(other->RightChild))
+				{
+					rb_set_black(other->LeftChild);
+					rb_set_red(other);
+					rb_rotate_right(other, root);
+					other = parent->RightChild;
+				}
+				other->u1.Balance = rb_color(parent);
+				rb_set_black(parent);
+				rb_set_black(other->RightChild);
+				rb_rotate_left(parent, root);
+				node = root->BalancedRoot.RightChild;
+				break;
+			}
+		}
+		else
+		{
+			other = parent->LeftChild;
+			if (rb_is_red(other))
+			{
+				rb_set_black(other);
+				rb_set_red(parent);
+				rb_rotate_right(parent, root);
+				other = parent->LeftChild;
+			}
+			if ((!other->LeftChild || rb_is_black(other->LeftChild)) &&
+				(!other->RightChild || rb_is_black(other->RightChild)))
+			{
+				rb_set_red(other);
+				node = parent;
+				parent = rb_parent(node);
+			}
+			else
+			{
+				if (!other->LeftChild || rb_is_black(other->LeftChild))
+				{
+					rb_set_black(other->RightChild);
+					rb_set_red(other);
+					rb_rotate_left(other, root);
+					other = parent->LeftChild;
+				}
+				other->u1.Balance=parent->u1.Balance;
+				rb_set_black(parent);
+				rb_set_black(other->LeftChild);
+				rb_rotate_right(parent, root);
+				node = root->BalancedRoot.RightChild;
+				break;
+			}
+		}
+	}
+	if (node)
+		rb_set_black(node);
+
+	return;
+}
+
+////////////////////////////////////////////////////
 TABLE_SEARCH_RESULT
 MiFindNodeOrParent (
     IN PMM_AVL_TABLE Table,
@@ -839,232 +954,77 @@ Environment:
 --*/
 
 {
-    PMMADDRESS_NODE Parent;
-    PMMADDRESS_NODE EasyDelete;
-    PMMADDRESS_NODE P;
-    SCHAR a;
-
-    //
-    // If the NodeToDelete has at least one NULL child pointer, then we can
-    // delete it directly.
-    //
-
-    if ((NodeToDelete->LeftChild == NULL) ||
-        (NodeToDelete->RightChild == NULL)) {
-
-        EasyDelete = NodeToDelete;
-    }
-
-    //
-    // Otherwise, we may as well pick the longest side to delete from (if one is
-    // is longer), as that reduces the probability that we will have to
-    // rebalance.
-    //
-
-    else if ((SCHAR) NodeToDelete->u1.Balance >= 0) {
-
-        //
-        // Pick up the subtree successor.
-        //
-
-        EasyDelete = NodeToDelete->RightChild;
-        while (EasyDelete->LeftChild != NULL) {
-            EasyDelete = EasyDelete->LeftChild;
-        }
-    }
-    else {
-
-        //
-        // Pick up the subtree predecessor.
-        //
-
-        EasyDelete = NodeToDelete->LeftChild;
-        while (EasyDelete->RightChild != NULL) {
-            EasyDelete = EasyDelete->RightChild;
-        }
-    }
-
-    //
-    // Rebalancing must know which side of the first parent the delete occurred
-    // on.  Assume it is the left side and otherwise correct below.
-    //
-
-    a = -1;
-
-    //
-    // Now we can do the simple deletion for the no left child case.
-    //
-
-    if (EasyDelete->LeftChild == NULL) {
-
-        Parent = SANITIZE_PARENT_NODE (EasyDelete->u1.Parent);
-
-        if (MiIsLeftChild(EasyDelete)) {
-            Parent->LeftChild = EasyDelete->RightChild;
-        }
-        else {
-            Parent->RightChild = EasyDelete->RightChild;
-            a = 1;
-        }
-
-        if (EasyDelete->RightChild != NULL) {
-            EasyDelete->RightChild->u1.Parent = MI_MAKE_PARENT (Parent, EasyDelete->RightChild->u1.Balance);
-        }
-
-    //
-    // Now we can do the simple deletion for the no right child case,
-    // plus we know there is a left child.
-    //
-
-    }
-    else {
-
-        Parent = SANITIZE_PARENT_NODE (EasyDelete->u1.Parent);
-
-        if (MiIsLeftChild(EasyDelete)) {
-            Parent->LeftChild = EasyDelete->LeftChild;
-        }
-        else {
-            Parent->RightChild = EasyDelete->LeftChild;
-            a = 1;
-        }
-
-        EasyDelete->LeftChild->u1.Parent = MI_MAKE_PARENT (Parent,
-                                            EasyDelete->LeftChild->u1.Balance);
-    }
-
-    //
-    // For delete rebalancing, set the balance at the root to 0 to properly
-    // terminate the rebalance without special tests, and to be able to detect
-    // if the depth of the tree actually decreased.
-    //
-
-    Table->BalancedRoot.u1.Balance = 0;
-    P = SANITIZE_PARENT_NODE (EasyDelete->u1.Parent);
-
-    //
-    // Loop until the tree is balanced.
-    //
-
-    while (TRUE) {
-
-        //
-        // First handle the case where the tree became more balanced.  Zero
-        // the balance factor, calculate a for the next loop and move on to
-        // the parent.
-        //
-
-        if ((SCHAR) P->u1.Balance == a) {
-
-            P->u1.Balance = 0;
-
-        //
-        // If this node is curently balanced, we can show it is now unbalanced
-        // and terminate the scan since the subtree length has not changed.
-        // (This may be the root, since we set Balance to 0 above!)
-        //
-
-        }
-        else if (P->u1.Balance == 0) {
-
-            PRINT("REBADJ D: Node %p, Bal %x -> %x\n", P, P->u1.Balance, -a);
-            COUNT_BALANCE_MAX ((SCHAR)-a);
-            P->u1.Balance = -a;
-
-            //
-            // If we shortened the depth all the way back to the root, then
-            // the tree really has one less level.
-            //
-
-            if (Table->BalancedRoot.u1.Balance != 0) {
-                Table->DepthOfTree -= 1;
-            }
-
-            break;
-
-        //
-        // Otherwise we made the short side 2 levels less than the long side,
-        // and rebalancing is required.  On return, some node has been promoted
-        // to above node P.  If Case 3 from Knuth was not encountered, then we
-        // want to effectively resume rebalancing from P's original parent which
-        // is effectively its grandparent now.
-        //
-
-        }
-        else {
-
-            //
-            // We are done if Case 3 was hit, i.e., the depth of this subtree is
-            // now the same as before the delete.
-            //
-
-            if (MiRebalanceNode(P)) {
-                break;
-            }
-
-            P = SANITIZE_PARENT_NODE (P->u1.Parent);
-        }
-
-        a = -1;
-        if (MiIsRightChild(P)) {
-            a = 1;
-        }
-        P = SANITIZE_PARENT_NODE (P->u1.Parent);
-    }
-
-    //
-    // Finally, if we actually deleted a predecessor/successor of the
-    // NodeToDelete, we will link him back into the tree to replace
-    // NodeToDelete before returning.  Note that NodeToDelete did have
-    // both child links filled in, but that may no longer be the case
-    // at this point.
-    //
-
-    if (NodeToDelete != EasyDelete) {
-
-        //
-        // Note carefully - VADs are of differing sizes therefore it is not safe
-        // to just overlay the EasyDelete node with the NodeToDelete like the
-        // rtl avl code does.
-        //
-        // Copy just the links, preserving the rest of the original EasyDelete
-        // VAD.
-        //
-
-        EasyDelete->u1.Parent = NodeToDelete->u1.Parent;
-        EasyDelete->LeftChild = NodeToDelete->LeftChild;
-        EasyDelete->RightChild = NodeToDelete->RightChild;
-
-        if (MiIsLeftChild(NodeToDelete)) {
-            Parent = SANITIZE_PARENT_NODE (EasyDelete->u1.Parent);
-            Parent->LeftChild = EasyDelete;
-        }
-        else {
-            ASSERT(MiIsRightChild(NodeToDelete));
-            Parent = SANITIZE_PARENT_NODE (EasyDelete->u1.Parent);
-            Parent->RightChild = EasyDelete;
-        }
-        if (EasyDelete->LeftChild != NULL) {
-            EasyDelete->LeftChild->u1.Parent = MI_MAKE_PARENT (EasyDelete,
-                                            EasyDelete->LeftChild->u1.Balance);
-        }
-        if (EasyDelete->RightChild != NULL) {
-            EasyDelete->RightChild->u1.Parent = MI_MAKE_PARENT (EasyDelete,
-                                            EasyDelete->RightChild->u1.Balance);
-        }
-    }
-
-    Table->NumberGenericTableElements -= 1;
-
-    //
-    // Sanity check tree size and depth.
-    //
-
-    ASSERT((Table->NumberGenericTableElements >= MiWorstCaseFill[Table->DepthOfTree]) &&
-           (Table->NumberGenericTableElements <= MiBestCaseFill[Table->DepthOfTree]));
-
-    return;
+	
+	PMMADDRESS_NODE child,parent;
+	int color;
+	
+	if(!NodeToDelete->LeftChild)
+		child=NodeToDelete->RightChild;
+	else if(!NodeToDelete->RightChild)
+		child=NodeToDelete->LeftChild;
+	else
+	{
+		PMMADDRESS_NODE old,left;
+		old = NodeToDelete;
+		NodeToDelete = NodeToDelete->RightChild;
+		while((left=NodeToDelete->LeftChild)!=NULL)
+			NodeToDelete = left;
+		if(rb_parent(old))
+		{
+			if(rb_parent(old)->LeftChild == old)
+				rb_parent(old)->LeftChild = NodeToDelete;
+			else
+				rb_parent(old)->RightChild = NodeToDelete;
+		}
+		else
+		{
+			(Table->BalancedRoot).RightChild = NodeToDelete;
+		}
+		child = NodeToDelete->RightChild;
+		parent = rb_parent(NodeToDelete);
+		color = rb_color(NodeToDelete);
+	
+		if (parent == old) {
+			parent = NodeToDelete;
+		} else {
+			if (child)
+				rb_set_parent(child, parent);
+			parent->LeftChild = child;
+	
+			NodeToDelete->RightChild = old->RightChild;
+			rb_set_parent(old->RightChild, NodeToDelete);
+		}
+		NodeToDelete->u1.Parent = old->u1.Parent;
+		NodeToDelete->LeftChild = old->LeftChild;
+		rb_set_parent(old->LeftChild, NodeToDelete);
+	
+		goto color;
+	}
+	
+	parent = rb_parent(NodeToDelete);
+	color = rb_color(NodeToDelete);
+	
+	if (child)
+		rb_set_parent(child, parent);
+	if (parent)
+	{
+		if (parent->LeftChild == NodeToDelete)
+			parent->LeftChild = child;
+		else
+			parent->RightChild = child;
+	}
+	else
+		Table->BalancedRoot.RightChild = child;
+	
+color:
+	if (color == rb_black)
+		rb_erase_color(child, parent, Table);
+	
+	Table->NumberGenericTableElements-=1;
+		
+	return;
 }
+
 
 
 PMMADDRESS_NODE
@@ -1325,170 +1285,99 @@ Environment:
     // parent of the node.
     //
 
-    PMMADDRESS_NODE NodeOrParent;
-    TABLE_SEARCH_RESULT SearchResult;
-
-    ASSERT((Table->NumberGenericTableElements >= MiWorstCaseFill[Table->DepthOfTree]) &&
-           (Table->NumberGenericTableElements <= MiBestCaseFill[Table->DepthOfTree]));
-
-    SearchResult = MiFindNodeOrParent (Table,
-                                       NodeToInsert->StartingVpn,
-                                       &NodeOrParent);
-
-    ASSERT (SearchResult != TableFoundNode);
-
-    //
-    // The node wasn't in the (possibly empty) tree.
-    //
-    // We just check that the table isn't getting too big.
-    //
-
-    ASSERT (Table->NumberGenericTableElements != (MAXULONG-1));
-
-    NodeToInsert->LeftChild = NULL;
-    NodeToInsert->RightChild = NULL;
-
-    Table->NumberGenericTableElements += 1;
+    PMMADDRESS_NODE NodeOrParent,parent,gparent;
+		TABLE_SEARCH_RESULT SearchResult;
+		SearchResult = MiFindNodeOrParent (Table,
+			NodeToInsert->StartingVpn,
+			&NodeOrParent);
+	
+		NodeToInsert->LeftChild = NULL;
+		NodeToInsert->RightChild = NULL;
+	
+		Table->NumberGenericTableElements += 1;
+	
 
     //
     // Insert the new node in the tree.
     //
+		if (SearchResult == TableEmptyTree) {
+	
+			Table->BalancedRoot.RightChild = NodeToInsert;
+			rb_set_parent(NodeToInsert,&Table->BalancedRoot);
+	
+		}
+		else {
+	
+			if (SearchResult == TableInsertAsLeft) {
+				NodeOrParent->LeftChild = NodeToInsert;
+			}
+			else {
+				NodeOrParent->RightChild = NodeToInsert;
+			}
+	
+			rb_set_parent(NodeToInsert,NodeOrParent);
+			NodeToInsert->u1.Balance = rb_red ;
+			while((parent=SANITIZE_PARENT_NODE(NodeToInsert->u1.Parent)) && rb_is_red(parent) )
+			{
+				gparent = rb_parent(parent);
+				if(parent == gparent->LeftChild)
+				{
+					{
+						PMMADDRESS_NODE uncle = gparent->RightChild;
+						if ( uncle && rb_is_red ( uncle ))
+						{
+							rb_set_black(uncle);
+							rb_set_black(parent);
+							rb_set_red(gparent);
+							NodeToInsert = gparent;
+							continue;
+						}
+					}
+					if(parent->RightChild == NodeToInsert)
+					{
+						register PMMADDRESS_NODE tmp;
+						rb_rotate_left(parent,Table);
+						tmp = parent;
+						parent = NodeToInsert;
+						NodeToInsert = tmp;
+					}
+					rb_set_black(parent);
+					rb_set_red(gparent);
+					rb_rotate_right(gparent,Table);
+				}
+				else
+				{
+					{
+						register PMMADDRESS_NODE uncle = gparent->LeftChild;
+						if (uncle && rb_is_red(uncle))
+						{
+							rb_set_black(uncle);
+							rb_set_black(parent);
+							rb_set_red(gparent);
+							NodeToInsert = gparent;
+							continue;
+						}
+					}
 
-    if (SearchResult == TableEmptyTree) {
+					if (parent->LeftChild == NodeToInsert)
+					{
+						register PMMADDRESS_NODE tmp;
+						rb_rotate_right(parent, Table);
+						tmp = parent;
+						parent = NodeToInsert;
+						NodeToInsert = tmp;
+					}
 
-        Table->BalancedRoot.RightChild = NodeToInsert;
-        NodeToInsert->u1.Parent = &Table->BalancedRoot;
-        ASSERT (NodeToInsert->u1.Balance == 0);
-        ASSERT(Table->DepthOfTree == 0);
-        Table->DepthOfTree = 1;
-
-    ASSERT((Table->NumberGenericTableElements >= MiWorstCaseFill[Table->DepthOfTree]) &&
-           (Table->NumberGenericTableElements <= MiBestCaseFill[Table->DepthOfTree]));
-
-    }
-    else {
-
-        PMMADDRESS_NODE R = NodeToInsert;
-        PMMADDRESS_NODE S = NodeOrParent;
-
-        if (SearchResult == TableInsertAsLeft) {
-            NodeOrParent->LeftChild = NodeToInsert;
-        }
-        else {
-            NodeOrParent->RightChild = NodeToInsert;
-        }
-
-        NodeToInsert->u1.Parent = NodeOrParent;
-        ASSERT (NodeToInsert->u1.Balance == 0);
-
-        //
-        // The above completes the standard binary tree insertion, which
-        // happens to correspond to steps A1-A5 of Knuth's "balanced tree
-        // search and insertion" algorithm.  Now comes the time to adjust
-        // balance factors and possibly do a single or double rotation as
-        // in steps A6-A10.
-        //
-        // Set the Balance factor in the root to a convenient value
-        // to simplify loop control.
-        //
-
-        PRINT("REBADJ E: Table %p, Bal %x -> %x\n", Table, Table->BalancedRoot.u1.Balance, -1);
-        COUNT_BALANCE_MAX ((SCHAR)-1);
-        Table->BalancedRoot.u1.Balance = (ULONG_PTR) -1;
-
-        //
-        // Now loop to adjust balance factors and see if any balance operations
-        // must be performed, using NodeOrParent to ascend the tree.
-        //
-
-        do {
-
-            SCHAR a;
-
-            //
-            // Calculate the next adjustment.
-            //
-
-            a = 1;
-            if (MiIsLeftChild (R)) {
-                a = -1;
-            }
-
-            PRINT("LW 0: Table %p, Bal %x, %x\n", Table, Table->BalancedRoot.u1.Balance, a);
-            PRINT("LW 0: R Node %p, Bal %x, %x\n", R, R->u1.Balance, 1);
-            PRINT("LW 0: S Node %p, Bal %x, %x\n", S, S->u1.Balance, 1);
-
-            //
-            // If this node was balanced, show that it is no longer and
-            // keep looping.  This is essentially A6 of Knuth's algorithm,
-            // where he updates all of the intermediate nodes on the
-            // insertion path which previously had balance factors of 0.
-            // We are looping up the tree via Parent pointers rather than
-            // down the tree as in Knuth.
-            //
-
-            if (S->u1.Balance == 0) {
-
-                PRINT("REBADJ F: Node %p, Bal %x -> %x\n", S, S->u1.Balance, a);
-                COUNT_BALANCE_MAX ((SCHAR)a);
-                S->u1.Balance = a;
-                R = S;
-                S = SANITIZE_PARENT_NODE (S->u1.Parent);
-            }
-            else if ((SCHAR) S->u1.Balance != a) {
-
-                PRINT("LW 1: Table %p, Bal %x, %x\n", Table, Table->BalancedRoot.u1.Balance, -1);
-
-                //
-                // If this node has the opposite balance, then the tree got
-                // more balanced (or we hit the root) and we are done.
-                //
-                // Step A7.ii
-                //
-
-                S->u1.Balance = 0;
-
-                //
-                // If S is actually the root, then this means the depth
-                // of the tree just increased by 1!  (This is essentially
-                // A7.i, but we just initialized the root balance to force
-                // it through here.)
-                //
-
-                if (Table->BalancedRoot.u1.Balance == 0) {
-                    Table->DepthOfTree += 1;
-                }
-
-                break;
-            }
-            else {
-
-                PRINT("LW 2: Table %p, Bal %x, %x\n", Table, Table->BalancedRoot.u1.Balance, -1);
-
-                //
-                // The tree became unbalanced (path length differs
-                // by 2 below us) and we need to do one of the balancing
-                // operations, and then we are done.  The RebalanceNode routine
-                // does steps A7.iii, A8 and A9.
-                //
-
-                MiRebalanceNode (S);
-                break;
-            }
-            PRINT("LW 3: Table %p, Bal %x, %x\n", Table, Table->BalancedRoot.u1.Balance, -1);
-        } while (TRUE);
-        PRINT("LW 4: Table %p, Bal %x, %x\n", Table, Table->BalancedRoot.u1.Balance, -1);
-    }
-
-    //
-    // Sanity check tree size and depth.
-    //
-
-    ASSERT((Table->NumberGenericTableElements >= MiWorstCaseFill[Table->DepthOfTree]) &&
-           (Table->NumberGenericTableElements <= MiBestCaseFill[Table->DepthOfTree]));
-
-    return;
+					rb_set_black(parent);
+					rb_set_red(gparent);
+					rb_rotate_left(gparent,Table);
+				}
+			}
+			rb_set_black(Table->BalancedRoot.RightChild);
+		}
+	return;
 }
+
 
 
 PVOID
