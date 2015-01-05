@@ -76,7 +76,7 @@ void rb_set_parent( PMMADDRESS_NODE rb,PMMADDRESS_NODE p)
 {
 	rb->u1.Parent =(PMMADDRESS_NODE) (rb_color(rb) +(unsigned long) p);
 }
-static void __rb_rotate_left(PMMADDRESS_NODE *node, PMMADDRESS_NODE *root)
+static void __rb_rotate_left(PMMADDRESS_NODE node, PMMADDRESS_NODE root)
 {
 	PMMADDRESS_NODE *right = node->rb_right;
 	PMMADDRESS_NODE *parent = rb_parent(node);
@@ -99,7 +99,7 @@ static void __rb_rotate_left(PMMADDRESS_NODE *node, PMMADDRESS_NODE *root)
 	rb_set_parent(node, right);
 }
 
-static void __rb_rotate_right(PMMADDRESS_NODE *node, PMMADDRESS_NODE *root)
+static void __rb_rotate_right(PMMADDRESS_NODE node, PMMADDRESS_NODE root)
 {
 	PMMADDRESS_NODE *left = node->rb_left;
 	PMMADDRESS_NODE *parent = rb_parent(node);
