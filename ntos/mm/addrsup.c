@@ -76,6 +76,51 @@ void rb_set_parent( PMMADDRESS_NODE rb,PMMADDRESS_NODE p)
 {
 	rb->u1.Parent =(PMMADDRESS_NODE) (rb_color(rb) +(unsigned long) p);
 }
+static void __rb_rotate_left(PMMADDRESS_NODE *node, PMMADDRESS_NODE *root)
+{
+	PMMADDRESS_NODE *right = node->rb_right;
+	PMMADDRESS_NODE *parent = rb_parent(node);
+
+	if ((node->rb_right = right->rb_left))
+		rb_set_parent(right->rb_left, node);
+	right->rb_left = node;
+
+	rb_set_parent(right, parent);
+
+	if (parent)
+	{
+		if (node == parent->rb_left)
+			parent->rb_left = right;
+		else
+			parent->rb_right = right;
+	}
+	else
+		root->rb_node = right;
+	rb_set_parent(node, right);
+}
+
+static void __rb_rotate_right(PMMADDRESS_NODE *node, PMMADDRESS_NODE *root)
+{
+	PMMADDRESS_NODE *left = node->rb_left;
+	PMMADDRESS_NODE *parent = rb_parent(node);
+
+	if ((node->rb_left = left->rb_right))
+		rb_set_parent(left->rb_right, node);
+	left->rb_right = node;
+
+	rb_set_parent(left, parent);
+
+	if (parent)
+	{
+		if (node == parent->rb_right)
+			parent->rb_right = left;
+		else
+			parent->rb_left = left;
+	}
+	else
+		root->rb_node = left;
+	rb_set_parent(node, left);
+}
 static void rb_erase_color(PMMADDRESS_NODE node,PMMADDRESS_NODE parent,
 			     PMM_AVL_TABLE root)
 {
